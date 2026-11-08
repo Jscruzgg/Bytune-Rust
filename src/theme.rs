@@ -45,12 +45,47 @@ pub fn apply(ctx: &egui::Context) {
     v.widgets.inactive.fg_stroke = Stroke::new(1.5, TEXT_2);
     v.widgets.hovered.fg_stroke = Stroke::new(1.5, TEXT);
     v.widgets.active.fg_stroke = Stroke::new(1.5, TEXT);
-    ctx.set_visuals(v);
+    // Seleccionado (pestaña activa, botón "Letra"): gris claro con texto blanco, como ByTune.
+    v.selection.bg_fill = Color32::from_rgb(48, 48, 48);
+    // ByTune es siempre oscuro: no se sigue el tema claro/oscuro de Windows.
+    ctx.set_theme(egui::ThemePreference::Dark);
+    ctx.set_visuals_of(egui::Theme::Dark, v);
     ctx.all_styles_mut(|s| {
         s.spacing.item_spacing = egui::vec2(8.0, 8.0);
         s.spacing.button_padding = egui::vec2(12.0, 6.0);
         s.spacing.slider_rail_height = 4.0;
     });
+    fonts(ctx);
+}
+
+/// Iconos de Segoe Fluent Icons (Windows 11) / Segoe MDL2 Assets (Windows 10).
+pub mod icon {
+    pub const PREV: &str = "\u{E892}";
+    pub const NEXT: &str = "\u{E893}";
+    pub const PLAY: &str = "\u{E768}";
+    pub const PAUSE: &str = "\u{E769}";
+    pub const VOLUME: &str = "\u{E767}";
+}
+
+/// Texto en Segoe UI y los iconos de Windows, leídos de C:\Windows\Fonts (sin copiarlos al
+/// ejecutable). Si faltan, se queda con las fuentes de egui.
+fn fonts(ctx: &egui::Context) {
+    use egui::{FontData, FontDefinitions, FontFamily};
+    use std::sync::Arc;
+
+    let dir = std::path::Path::new(r"C:\Windows\Fonts");
+    let read = |names: &[&str]| names.iter().find_map(|n| std::fs::read(dir.join(n)).ok());
+    let mut defs = FontDefinitions::default();
+    if let Some(text) = read(&["segoeui.ttf"]) {
+        defs.font_data.insert("segoe".into(), Arc::new(FontData::from_owned(text)));
+        defs.families.entry(FontFamily::Proportional).or_default().insert(0, "segoe".into());
+    }
+    if let Some(icons) = read(&["SegoeIcons.ttf", "segmdl2.ttf"]) {
+        // Los iconos están en la zona de uso privado de Unicode: van de respaldo sin pisar nada.
+        defs.font_data.insert("icons".into(), Arc::new(FontData::from_owned(icons)));
+        defs.families.entry(FontFamily::Proportional).or_default().push("icons".into());
+    }
+    ctx.set_fonts(defs);
 }
 
 /// Icono de la app: círculo rojo con tres barras blancas en forma de "play". Mismo dibujo que

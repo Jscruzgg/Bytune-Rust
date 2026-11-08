@@ -341,12 +341,16 @@ impl App {
             ui.colored_label(theme::DANGER, s);
         }
         ui.add_space(8.0);
+        if self.results.is_empty() && !self.searching {
+            ui.add_space(40.0);
+            ui.label(RichText::new("Escribe una canción y pulsa Enter. Haz clic en un resultado para reproducirlo.").color(theme::TEXT_3).size(15.0));
+        }
 
         let mut clicked = None;
         egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, 64.0, self.results.len(), |ui, range| {
             for i in range {
                 let song = &self.results[i];
-                if song_row(ui, song, false).double_clicked() {
+                if song_row(ui, song, false).clicked() {
                     clicked = Some(i);
                 }
             }
@@ -455,8 +459,13 @@ impl App {
 
     fn player_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
-        let state = self.player.snapshot();
+        let mut state = self.player.snapshot();
         let song = self.current_song().cloned();
+        // Lo que tenga la web cargado por su cuenta (al abrir restaura la última canción) no
+        // cuenta: solo el estado de la canción de nuestra cola.
+        if song.as_ref().map(|s| &s.video_id) != state.id.as_ref() {
+            state = Default::default();
+        }
         let total = state.duration.map(|d| d.as_secs_f32()).or(song.as_ref().map(|s| s.duration as f32)).unwrap_or(0.0);
 
         ui.add_space(8.0);
@@ -478,14 +487,16 @@ impl App {
                 ui.horizontal(|ui| {
                     let w = 44.0 * 3.0 + 16.0;
                     ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));
-                    if ui.add(round_button("⏮", 36.0, false)).clicked() {
+                    if ui.add(round_button(theme::icon::PREV, 36.0, false)).clicked() {
                         self.previous(&ctx);
                     }
-                    let icon = if self.loading { "…" } else if state.playing { "⏸" } else { "▶" };
-                    if ui.add(round_button(icon, 44.0, true)).clicked() && !self.loading {
+                    let icon = if state.playing { theme::icon::PAUSE } else { theme::icon::PLAY };
+                    if self.loading {
+                        ui.add_sized([44.0, 44.0], egui::Spinner::new().size(28.0).color(theme::TEXT));
+                    } else if ui.add(round_button(icon, 44.0, true)).clicked() && song.is_some() {
                         self.player.toggle();
                     }
-                    if ui.add(round_button("⏭", 36.0, false)).clicked() {
+                    if ui.add(round_button(theme::icon::NEXT, 36.0, false)).clicked() {
                         self.next(&ctx);
                     }
                 });
@@ -519,7 +530,7 @@ impl App {
                     // Curva cuadrática: el oído percibe el volumen de forma logarítmica.
                     self.player.set_volume(vol * vol);
                 }
-                ui.label(RichText::new("🔊").color(theme::TEXT_2));
+                ui.label(RichText::new(theme::icon::VOLUME).size(16.0).color(theme::TEXT_2));
             });
         });
     }
