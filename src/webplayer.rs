@@ -29,12 +29,27 @@ pub struct State {
     pub duration: Option<Duration>,
     /// La canción pedida terminó (la UI pasa a la siguiente). Se consume con `take_finished`.
     pub finished: Option<String>,
+    /// La canción tiene vídeo (el conmutador canción/vídeo de la web está activo).
+    pub has_video: bool,
+    /// Lo que está puesto en el conmutador: true = vídeo.
+    pub video: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "t", rename_all = "lowercase")]
 enum FromPage {
-    State { ready: bool, id: Option<String>, pos: f64, dur: f64, playing: bool, buffering: bool },
+    State {
+        ready: bool,
+        id: Option<String>,
+        pos: f64,
+        dur: f64,
+        playing: bool,
+        buffering: bool,
+        #[serde(default, rename = "hasVideo")]
+        has_video: bool,
+        #[serde(default)]
+        av: Option<String>,
+    },
     Ended { id: String },
 }
 
@@ -45,6 +60,9 @@ pub struct WebPlayer {
     /// Última orden pendiente hasta que el reproductor esté listo.
     pending_load: Option<String>,
     volume: f32,
+    /// Dónde está el WebView ahora (None = 1×1, escondido).
+    placed: Option<egui::Rect>,
+    video_mode: bool,
 }
 
 impl WebPlayer {
@@ -59,10 +77,12 @@ impl WebPlayer {
             // Chromium no empieza a cargar audio en una página oculta (lo aplaza hasta que se
             // vea), así que el WebView queda "visible" pero de 1×1 px. Sin el cálculo de
             // oclusión tampoco se considera oculto con la ventana minimizada o tapada.
-            .with_additional_browser_args(
+            .with_additional_browser_args(format!(
                 "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion \
-                 --autoplay-policy=no-user-gesture-required",
-            )
+                 --autoplay-policy=no-user-gesture-required{}",
+                // Solo desarrollo: BYTUNE_DEBUG_PORT=9222 abre DevTools por CDP (como YTM_DEBUG_PORT en ByTune).
+                std::env::var("BYTUNE_DEBUG_PORT").map(|p| format!(" --remote-debugging-port={p}")).unwrap_or_default()
+            ))
             .with_visible(true)
             .with_devtools(cfg!(debug_assertions))
             .with_bounds(wry::Rect { position: LogicalPosition::new(0, 0).into(), size: LogicalSize::new(1, 1).into() })
@@ -71,7 +91,9 @@ impl WebPlayer {
                 let Ok(msg) = serde_json::from_str::<FromPage>(req.body()) else { return };
                 let mut s = st.lock().unwrap();
                 match msg {
-                    FromPage::State { ready, id, pos, dur, playing, buffering } => {
+                    FromPage::State { ready, id, pos, dur, playing, buffering, has_video, av } => {
+                        s.has_video = has_video;
+                        s.video = av.as_deref() == Some("video");
                         if ready != s.ready {
                             log::info!("reproductor web {}", if ready { "listo" } else { "no disponible" });
                         }
@@ -91,7 +113,37 @@ impl WebPlayer {
             .map_err(|e| anyhow!("WebView2: {e}"))?;
         // El contexto solo hace falta al crear el WebView, pero WebView2 lo usa mientras viva.
         std::mem::forget(context);
-        Ok(Self { view, state, login_open: false, pending_load: None, volume: 1.0 })
+        Ok(Self { view, state, login_open: false, pending_load: None, volume: 1.0, placed: None, video_mode: false })
+    }
+
+    /// Canción o vídeo (el conmutador de la web).
+    pub fn set_av(&self, video: bool) {
+        self.js(&format!("window.__bt.av('{}')", if video { "video" } else { "song" }));
+    }
+
+    /// Muestra el vídeo de la web ocupando `rect`, o lo esconde (None). Se llama en cada
+    /// fotograma con la zona de la portada en Now Playing.
+    pub fn show_video(&mut self, rect: Option<egui::Rect>) {
+        if self.login_open {
+            return;
+        }
+        let on = rect.is_some();
+        if on != self.video_mode {
+            self.video_mode = on;
+            self.js(&format!("window.__bt.videoMode({on})"));
+        }
+        let key = |r: egui::Rect| [r.min.x, r.min.y, r.max.x, r.max.y].map(|v| v.round() as i32);
+        if rect.map(key) != self.placed.map(key) {
+            match rect {
+                Some(r) => self.place(r),
+                None => self.hide(),
+            }
+            self.placed = rect;
+        }
+    }
+
+    fn hide(&self) {
+        let _ = self.view.set_bounds(wry::Rect { position: LogicalPosition::new(0, 0).into(), size: LogicalSize::new(1, 1).into() });
     }
 
     pub fn snapshot(&self) -> State {
@@ -151,6 +203,10 @@ impl WebPlayer {
 
     /// Muestra la página de Google ocupando `rect` (en puntos lógicos de la ventana).
     pub fn open_login(&mut self, rect: egui::Rect) {
+        if self.video_mode {
+            self.video_mode = false;
+            self.js("window.__bt.videoMode(false)");
+        }
         self.login_open = true;
         let _ = self.view.load_url(login::START);
         self.place(rect);
@@ -166,7 +222,8 @@ impl WebPlayer {
 
     pub fn close_login(&mut self) {
         self.login_open = false;
-        let _ = self.view.set_bounds(wry::Rect { position: LogicalPosition::new(0, 0).into(), size: LogicalSize::new(1, 1).into() });
+        self.hide();
+        self.placed = None;
         let _ = self.view.focus_parent();
         if !self.view.url().is_ok_and(|u| u.starts_with(HOME)) {
             let _ = self.view.load_url(HOME);

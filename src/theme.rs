@@ -65,6 +65,25 @@ pub mod icon {
     pub const PLAY: &str = "\u{E768}";
     pub const PAUSE: &str = "\u{E769}";
     pub const VOLUME: &str = "\u{E767}";
+    pub const MUTE: &str = "\u{E74F}";
+    pub const SHUFFLE: &str = "\u{E8B1}";
+    pub const RADIO: &str = "\u{E93E}";
+    pub const MUSIC: &str = "\u{E8D6}";
+    pub const HOME: &str = "\u{E80F}";
+    pub const EXPLORE: &str = "\u{E909}";
+    pub const LIBRARY: &str = "\u{E8F1}";
+    pub const SEARCH: &str = "\u{E721}";
+    pub const SETTINGS: &str = "\u{E713}";
+    pub const BACK: &str = "\u{E72B}";
+    pub const FORWARD: &str = "\u{E72A}";
+    pub const HEART: &str = "\u{EB51}";
+    pub const HEART_FILL: &str = "\u{EB52}";
+    pub const FULLSCREEN: &str = "\u{E740}";
+    pub const EXIT_FULLSCREEN: &str = "\u{E73F}";
+    pub const LYRICS: &str = "\u{E8BD}";
+    pub const VIDEO: &str = "\u{E714}";
+    pub const HEADPHONES: &str = "\u{E7F6}";
+    pub const NOW_PLAYING: &str = "\u{E93C}";
 }
 
 /// Texto en Segoe UI y los iconos de Windows, leídos de C:\Windows\Fonts (sin copiarlos al
