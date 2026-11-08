@@ -1,0 +1,44 @@
+[package]
+name = "bytune-rs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "ByTune nativo en Rust: cliente de YouTube Music sin navegador"
+publish = false
+
+[[bin]]
+name = "bytune"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+crossbeam-channel = "0.5"
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "persistence", "accesskit"] }
+egui = "0.37"
+egui_extras = { version = "0.37", features = ["image", "http"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+log = "0.4"
+raw-window-handle = "0.6"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+souvlaki = "0.8"
+sys-locale = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "process", "macros"] }
+url = "2"
+wry = "0.57"
+sha1 = "0.10"
+hex = "0.4"
+directories = "6"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Las dependencias optimizadas también en debug: decodificar AAC sin optimizar va a tirones.
+[profile.dev.package."*"]
+opt-level = 2
